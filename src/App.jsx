@@ -880,6 +880,7 @@ Grand Total: RM 54000.00`;
                   >
                     <option value="ENT01">TC-01: ENT01 (MSME 15%/17%/24%)</option>
                     <option value="ENT02">TC-02: ENT02 (Foreign WHT & CP204 Blocker)</option>
+                    <option value="ENT-TEST-01">TC-TEST: ENT-TEST-01 (Pre-Flight TB Check & Variance Alert)</option>
                     <option value="ENT03">TC-03: ENT03 (Edge Case: CP204A Revision)</option>
                     <option value="ENT04">TC-04: ENT04 (Edge Case: High-Capital Non-MSME)</option>
                   </select>
@@ -971,6 +972,21 @@ Grand Total: RM 54000.00`;
                     </div>
                   </div>
                 </div>
+
+                {/* Pre-Flight Balance Check & Data Integrity Warnings */}
+                {corpResult.data_integrity_warnings && corpResult.data_integrity_warnings.length > 0 && (
+                  <div className="p-4 bg-rose-950/40 border border-rose-800/80 rounded-xl space-y-2">
+                    <span className="text-xs font-bold text-rose-300 font-mono flex items-center space-x-1.5">
+                      <AlertTriangle className="w-4 h-4 text-rose-400" />
+                      <span>AGT-INTAKE Pre-Flight Balance-Check Warnings ({corpResult.data_integrity_warnings.length})</span>
+                    </span>
+                    <ul className="space-y-1 text-xs text-rose-200 font-mono list-disc list-inside">
+                      {corpResult.data_integrity_warnings.map((warn, wIdx) => (
+                        <li key={wIdx} className="leading-relaxed">{warn}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
                 {/* Statutory GL Classification Table */}
                 <div className="space-y-2">
