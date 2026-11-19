@@ -29,7 +29,16 @@ import {
   Eye,
   Calculator,
   ArrowRight,
-  Download
+  Download,
+  Building2,
+  Store,
+  Briefcase,
+  TrendingUp,
+  Percent,
+  ChevronRight,
+  Info,
+  HelpCircle,
+  Compass
 } from 'lucide-react';
 
 const DEFAULT_CONFIG = {
@@ -50,7 +59,9 @@ export default function App() {
     }
   });
 
-  const [activeTab, setActiveTab] = useState('extract'); // extract | orchestrate | mass | track | reports | logs | rag | settings
+  const [activeTab, setActiveTab] = useState('dashboard'); // dashboard | extract | orchestrate | mass | track | reports | logs | rag | settings
+  const [userPersona, setUserPersona] = useState('all'); // all | corporate | sme
+  const [calcProfit, setCalcProfit] = useState(500000);
   const [healthStatus, setHealthStatus] = useState({ online: false, checking: true });
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -201,18 +212,20 @@ export default function App() {
   const [corpTargetEntity, setCorpTargetEntity] = useState('ENT01');
   const [corpResult, setCorpResult] = useState(null);
   const [corpLoading, setCorpLoading] = useState(false);
+  const [corpFile, setCorpFile] = useState(null);
 
-  const handleRunCorporateWorkbook = async (entityId) => {
+  const handleRunCorporateWorkbook = async (entityId, uploadedFile = null) => {
+    const fileToUse = uploadedFile || corpFile || ocrFile;
     const target = entityId || corpTargetEntity;
-    if (!ocrFile || !ocrFile.name.toLowerCase().endsWith('.xlsx')) {
-      setErrorMessage('Please upload or drag & drop a 5-sheet Corporate Tax Workbook (.xlsx) above first.');
+    if (!fileToUse || !fileToUse.name.toLowerCase().endsWith('.xlsx')) {
+      setErrorMessage('Please select or upload a 5-sheet Corporate Tax Workbook (.xlsx) file.');
       return;
     }
     setCorpLoading(true);
     setErrorMessage('');
     try {
       const formData = new FormData();
-      formData.append('file', ocrFile);
+      formData.append('file', fileToUse);
       const url = `${config.apiBase}/tax/process-corporate-workbook?target_entity=${encodeURIComponent(target)}`;
       const options = { method: 'POST', body: formData };
 
@@ -226,7 +239,7 @@ export default function App() {
       if (data.arranged_request) {
         setOcrDraft(data.arranged_request);
         setOcrResult({
-          filename: ocrFile ? ocrFile.name : `Corporate_Tax_Workbook_[${data.entity_id}].xlsx`,
+          filename: fileToUse.name,
           extraction_method: 'AGT-INTAKE_WORKBOOK_NORMALIZER',
           raw_text_preview: JSON.stringify(data.gl_mappings, null, 2),
           confidence_scores: {
@@ -408,6 +421,7 @@ export default function App() {
 
   useEffect(() => {
     checkHealth();
+    fetchReports();
     const interval = setInterval(checkHealth, 30000);
     return () => clearInterval(interval);
   }, [config.apiBase]);
@@ -468,7 +482,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (activeTab === 'reports') fetchReports();
+    if (activeTab === 'dashboard' || activeTab === 'reports') fetchReports();
     if (activeTab === 'logs') fetchLogs();
     if (activeTab === 'rag') fetchKbDocs();
   }, [activeTab, config.apiBase]);
@@ -761,17 +775,67 @@ export default function App() {
           </div>
         </div>
 
+        {/* Corporate vs SME Persona Switcher Bar */}
+        <div className="max-w-7xl mx-auto px-4 py-1.5 flex flex-wrap items-center justify-between gap-2 border-t border-slate-800/60 bg-slate-900/50">
+          <div className="flex items-center space-x-1 sm:space-x-2 text-xs">
+            <span className="text-[11px] text-slate-400 font-medium mr-1 hidden sm:inline">Workspace Persona:</span>
+            {[
+              { id: 'all', label: 'Unified View', icon: Compass },
+              { id: 'corporate', label: 'Corporate Enterprise', icon: Building2 },
+              { id: 'sme', label: 'SME / MSME Mode', icon: Store }
+            ].map((p) => {
+              const PIcon = p.icon;
+              const isSelected = userPersona === p.id;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => setUserPersona(p.id)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center space-x-1.5 transition ${
+                    isSelected
+                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                  }`}
+                >
+                  <PIcon className="w-3.5 h-3.5" />
+                  <span>{p.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center space-x-2 text-xs">
+            {userPersona === 'sme' && (
+              <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 border border-emerald-800 px-2 py-0.5 rounded-full flex items-center space-x-1">
+                <Store className="w-3 h-3 text-emerald-400" />
+                <span>Schedule 1 Para 2B: 15% / 17% MSME Rate Active</span>
+              </span>
+            )}
+            {userPersona === 'corporate' && (
+              <span className="text-[10px] font-mono text-indigo-300 bg-indigo-950/80 border border-indigo-800 px-2 py-0.5 rounded-full flex items-center space-x-1">
+                <Building2 className="w-3 h-3 text-indigo-400" />
+                <span>CP204 Guardrails & Schedule 3 CA Active</span>
+              </span>
+            )}
+            {userPersona === 'all' && (
+              <span className="text-[10px] font-mono text-slate-400 bg-slate-800/60 border border-slate-700 px-2 py-0.5 rounded-full">
+                Sovereign ITA 1967 YA 2026 Engine
+              </span>
+            )}
+          </div>
+        </div>
+
         {/* Navigation Tabs */}
-        <div className="max-w-7xl mx-auto px-4 flex space-x-1 sm:space-x-3 text-xs font-medium border-t border-slate-800/60 pt-2 overflow-x-auto">
+        <div className="max-w-7xl mx-auto px-4 flex space-x-1 sm:space-x-2 text-xs font-medium border-t border-slate-800/60 pt-2 overflow-x-auto no-scrollbar">
           {[
-            { id: 'extract', label: 'OCR & Doc Studio', icon: ScanLine, badge: ocrResult ? 'Analyzed' : null },
-            { id: 'orchestrate', label: 'Single Ingestion', icon: FileText },
-            { id: 'mass', label: 'Mass Document Upload', icon: UploadCloud, badge: massBatch.length > 0 ? massBatch.length : null },
-            { id: 'track', label: 'Progress Checker', icon: Clock },
-            { id: 'reports', label: 'Reports & Analytics', icon: BarChart3 },
-            { id: 'logs', label: 'Audit Logs', icon: Database },
-            { id: 'rag', label: 'LHDN RAG Assistant', icon: Sparkles },
-            { id: 'settings', label: 'Webhook & Config', icon: Sliders }
+            { id: 'dashboard', label: 'Executive Cockpit', icon: BarChart3 },
+            { id: 'extract', label: 'Tax & Doc Studio', icon: ScanLine, badge: ocrResult ? 'Ready' : null },
+            { id: 'orchestrate', label: 'e-Invoice Builder', icon: FileText },
+            { id: 'mass', label: 'Batch Processing', icon: UploadCloud, badge: massBatch.length > 0 ? massBatch.length : null },
+            { id: 'track', label: 'Clearance Tracker', icon: Clock },
+            { id: 'reports', label: 'Tax Analytics', icon: Activity },
+            { id: 'logs', label: 'PDPA Audit Trail', icon: Database },
+            { id: 'rag', label: 'LHDN AI Advisor', icon: Sparkles },
+            { id: 'settings', label: 'Settings', icon: Sliders }
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -779,8 +843,8 @@ export default function App() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`pb-2.5 px-2 flex items-center space-x-1.5 border-b-2 transition whitespace-nowrap ${
-                  isActive ? 'border-cyan-400 text-cyan-400' : 'border-transparent text-slate-400 hover:text-slate-200'
+                className={`pb-2.5 px-2.5 flex items-center space-x-1.5 border-b-2 transition whitespace-nowrap ${
+                  isActive ? 'border-cyan-400 text-cyan-400 font-semibold' : 'border-transparent text-slate-400 hover:text-slate-200'
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" />
@@ -815,6 +879,466 @@ export default function App() {
       {/* Main Body View */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-4">
 
+        {/* TAB: EXECUTIVE COCKPIT DASHBOARD (Fit for Corporate and SMEs) */}
+        {activeTab === 'dashboard' && (
+          <div className="space-y-6">
+            {/* Hero / Persona Context Banner */}
+            <div className="bg-gradient-to-r from-slate-900 via-indigo-950/70 to-slate-900 border border-indigo-900/60 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
+              
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 relative z-10">
+                <div className="space-y-2 max-w-2xl">
+                  <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                    <span className="text-xs font-bold text-cyan-400 font-mono uppercase tracking-wider bg-cyan-950 px-2.5 py-0.5 rounded border border-cyan-800 flex items-center space-x-1">
+                      <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>MY-CorpTax-AgentOS • YA 2026</span>
+                    </span>
+                    <span className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700 font-mono">
+                      Malaysian ITA 1967 Statutory Engine
+                    </span>
+                  </div>
+
+                  <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+                    Corporate & SME Sovereign Tax Command Center
+                  </h1>
+                  <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                    Automated Malaysian LHDN MyInvois compliance, statutory corporate mapping, Schedule 3 Capital Allowances, and penny-exact MSME tiering with zero LLM arithmetic.
+                  </p>
+                </div>
+
+                {/* Persona Switcher Quick Card */}
+                <div className="bg-slate-950/80 border border-slate-800 p-3.5 rounded-xl flex flex-col space-y-2 sm:min-w-[280px]">
+                  <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider flex items-center space-x-1.5">
+                    <Compass className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Active Workflow Mode</span>
+                  </span>
+                  
+                  <div className="grid grid-cols-3 gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800">
+                    <button
+                      onClick={() => setUserPersona('all')}
+                      className={`text-[11px] py-1.5 px-2 rounded font-medium transition ${
+                        userPersona === 'all' ? 'bg-cyan-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Unified
+                    </button>
+                    <button
+                      onClick={() => setUserPersona('corporate')}
+                      className={`text-[11px] py-1.5 px-2 rounded font-medium transition ${
+                        userPersona === 'corporate' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Corporate
+                    </button>
+                    <button
+                      onClick={() => setUserPersona('sme')}
+                      className={`text-[11px] py-1.5 px-2 rounded font-medium transition ${
+                        userPersona === 'sme' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      SME / MSME
+                    </button>
+                  </div>
+
+                  <p className="text-[10px] text-slate-400 leading-tight">
+                    {userPersona === 'sme' && 'Focuses on 15%/17% reduced tax brackets (Schedule 1 Para 2B) & 1-click printable e-invoices.'}
+                    {userPersona === 'corporate' && 'Focuses on 5-sheet workbook compilation, Schedule 3 CA, CP204 guardrails & Sec 109 WHT.'}
+                    {userPersona === 'all' && 'Displays full enterprise tools for multi-entity holdings and SME operations.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Live KPI Metric Cockpit */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden group hover:border-cyan-500/40 transition">
+                <div className="flex items-center justify-between pb-2">
+                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider font-mono">Invoices Processed</span>
+                  <div className="p-2 bg-cyan-950/80 border border-cyan-800/80 rounded-xl text-cyan-400">
+                    <FileCheck2 className="w-4 h-4" />
+                  </div>
+                </div>
+                <div className="text-2xl font-extrabold text-white font-mono mt-1">
+                  {reports?.total_invoices_processed ?? 0}
+                </div>
+                <div className="flex items-center space-x-1.5 text-[11px] text-slate-400 mt-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                  <span>Sovereign Enclave Ready</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden group hover:border-cyan-500/40 transition">
+                <div className="flex items-center justify-between pb-2">
+                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider font-mono">Total Net Assessed</span>
+                  <div className="p-2 bg-indigo-950/80 border border-indigo-800/80 rounded-xl text-indigo-400">
+                    <Calculator className="w-4 h-4" />
+                  </div>
+                </div>
+                <div className="text-2xl font-extrabold text-white font-mono mt-1">
+                  RM {(reports?.total_net_amount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+                <div className="flex items-center space-x-1.5 text-[11px] text-slate-400 mt-2">
+                  <span className="text-indigo-400 font-mono">MYR</span>
+                  <span>Pre-Tax Commercial Basis</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden group hover:border-cyan-500/40 transition">
+                <div className="flex items-center justify-between pb-2">
+                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider font-mono">SST 8% Assessed</span>
+                  <div className="p-2 bg-emerald-950/80 border border-emerald-800/80 rounded-xl text-emerald-400">
+                    <Percent className="w-4 h-4" />
+                  </div>
+                </div>
+                <div className="text-2xl font-extrabold text-emerald-300 font-mono mt-1">
+                  RM {(reports?.total_sst_amount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+                <div className="flex items-center space-x-1.5 text-[11px] text-slate-400 mt-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  <span>Deterministic Python Decimal</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden group hover:border-cyan-500/40 transition">
+                <div className="flex items-center justify-between pb-2">
+                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider font-mono">LHDN Approval Rate</span>
+                  <div className="p-2 bg-blue-950/80 border border-blue-800/80 rounded-xl text-blue-400">
+                    <ShieldCheck className="w-4 h-4" />
+                  </div>
+                </div>
+                <div className="text-2xl font-extrabold text-cyan-300 font-mono mt-1">
+                  {reports?.auto_approval_rate_percent ?? 0}%
+                </div>
+                <div className="flex items-center space-x-1.5 text-[11px] text-slate-400 mt-2">
+                  <span className="text-cyan-400 font-mono">{reports?.auto_approved_count ?? 0}</span>
+                  <span>Approved /</span>
+                  <span className="text-rose-400 font-mono">{reports?.held_for_review_count ?? 0}</span>
+                  <span>Flagged</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 4 Fast-Action Workflows */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold text-white uppercase tracking-wider font-mono flex items-center space-x-2">
+                  <Compass className="w-4 h-4 text-cyan-400" />
+                  <span>Core Workflows for Corporate & SMEs</span>
+                </h2>
+                <span className="text-xs text-slate-400">Click any card to launch immediately</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Action 1: Corporate Tax Engine */}
+                <div 
+                  onClick={() => setActiveTab('extract')}
+                  className="bg-slate-900/90 border border-slate-800 hover:border-indigo-500 rounded-2xl p-5 cursor-pointer transition group shadow-md hover:shadow-indigo-500/10 flex flex-col justify-between space-y-4"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="p-2.5 bg-indigo-950 border border-indigo-800 rounded-xl text-indigo-300 group-hover:scale-105 transition">
+                        <Building2 className="w-5 h-5" />
+                      </div>
+                      <span className="text-[10px] font-mono bg-indigo-950 text-indigo-300 border border-indigo-800 px-2 py-0.5 rounded uppercase">
+                        ITA 1967 YA2026
+                      </span>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-white group-hover:text-indigo-300 transition">
+                        5-Sheet Corporate Tax Engine
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-1 line-clamp-3">
+                        Ingests Master Profiles, Trial Balances, CP204 records with automated header offset, Schedule 3 CA deductions & CP204 guardrails.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs font-semibold text-indigo-400 group-hover:text-indigo-300">
+                    <span>Launch Corporate Engine</span>
+                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition" />
+                  </div>
+                </div>
+
+                {/* Action 2: OCR & Doc Studio */}
+                <div 
+                  onClick={() => setActiveTab('extract')}
+                  className="bg-slate-900/90 border border-slate-800 hover:border-cyan-500 rounded-2xl p-5 cursor-pointer transition group shadow-md hover:shadow-cyan-500/10 flex flex-col justify-between space-y-4"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="p-2.5 bg-cyan-950 border border-cyan-800 rounded-xl text-cyan-300 group-hover:scale-105 transition">
+                        <ScanLine className="w-5 h-5" />
+                      </div>
+                      <span className="text-[10px] font-mono bg-cyan-950 text-cyan-300 border border-cyan-800 px-2 py-0.5 rounded uppercase">
+                        Multimodal OCR
+                      </span>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-white group-hover:text-cyan-300 transition">
+                        Document OCR & Tax Plotter
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-1 line-clamp-3">
+                        Extracts tax data inch-by-inch from CSV, XLSX, PDF, PNG, JPG scans and renders into the 11-column precision table.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs font-semibold text-cyan-400 group-hover:text-cyan-300">
+                    <span>Open OCR Studio</span>
+                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition" />
+                  </div>
+                </div>
+
+                {/* Action 3: e-Invoice Builder */}
+                <div 
+                  onClick={() => setActiveTab('orchestrate')}
+                  className="bg-slate-900/90 border border-slate-800 hover:border-emerald-500 rounded-2xl p-5 cursor-pointer transition group shadow-md hover:shadow-emerald-500/10 flex flex-col justify-between space-y-4"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="p-2.5 bg-emerald-950 border border-emerald-800 rounded-xl text-emerald-300 group-hover:scale-105 transition">
+                        <FileText className="w-5 h-5" />
+                      </div>
+                      <span className="text-[10px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-800 px-2 py-0.5 rounded uppercase">
+                        Printable PDF QR
+                      </span>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-white group-hover:text-emerald-300 transition">
+                        Instant e-Invoice Builder
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-1 line-clamp-3">
+                        Build validated LHDN MyInvois submissions with TIN validation, deterministic SST calculation, and download printable QR code PDFs.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs font-semibold text-emerald-400 group-hover:text-emerald-300">
+                    <span>Create e-Invoice</span>
+                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition" />
+                  </div>
+                </div>
+
+                {/* Action 4: Clearance Tracker */}
+                <div 
+                  onClick={() => setActiveTab('track')}
+                  className="bg-slate-900/90 border border-slate-800 hover:border-amber-500 rounded-2xl p-5 cursor-pointer transition group shadow-md hover:shadow-amber-500/10 flex flex-col justify-between space-y-4"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="p-2.5 bg-amber-950 border border-amber-800 rounded-xl text-amber-300 group-hover:scale-105 transition">
+                        <Clock className="w-5 h-5" />
+                      </div>
+                      <span className="text-[10px] font-mono bg-amber-950 text-amber-300 border border-amber-800 px-2 py-0.5 rounded uppercase">
+                        Live Tracking
+                      </span>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-white group-hover:text-amber-300 transition">
+                        LHDN Clearance Tracker
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-1 line-clamp-3">
+                        Instantly check live invoice clearance status against the official LHDN gateway with cryptographic UUID verification.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs font-semibold text-amber-400 group-hover:text-amber-300">
+                    <span>Check Clearance Status</span>
+                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Interactive YA 2026 Corporate vs MSME Tax Comparison Simulator */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
+              <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-slate-800 gap-3">
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center space-x-2">
+                    <Calculator className="w-5 h-5 text-cyan-400" />
+                    <span>Malaysian YA 2026 Corporate vs SME Tax Simulator</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Interactive statutory tax estimator under Income Tax Act 1967 (Schedule 1 Para 2B MSME vs Non-MSME Standard Corporate).
+                  </p>
+                </div>
+
+                <div className="flex items-center space-x-1.5 flex-wrap gap-1">
+                  <span className="text-[10px] font-mono text-slate-400 mr-1">Presets:</span>
+                  {[150000, 500000, 600000, 1000000, 2500000].map((preset) => (
+                    <button
+                      key={preset}
+                      onClick={() => setCalcProfit(preset)}
+                      className={`text-[10px] font-mono px-2 py-1 rounded transition border ${
+                        calcProfit === preset
+                          ? 'bg-cyan-950 text-cyan-300 border-cyan-700'
+                          : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                      }`}
+                    >
+                      RM {(preset / 1000).toFixed(0)}k
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Profit Input Slider & Text */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                    <span>Chargeable Business Income (RM):</span>
+                    <span className="text-cyan-400 font-mono text-sm font-bold">
+                      RM {Number(calcProfit).toLocaleString()}
+                    </span>
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="10000"
+                    value={calcProfit}
+                    onChange={(e) => setCalcProfit(Math.max(0, parseFloat(e.target.value) || 0))}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-sm outline-none focus:border-cyan-500 transition"
+                  />
+                  <input 
+                    type="range"
+                    min="0"
+                    max="3000000"
+                    step="25000"
+                    value={calcProfit}
+                    onChange={(e) => setCalcProfit(parseFloat(e.target.value))}
+                    className="w-full accent-cyan-500 cursor-pointer"
+                  />
+                </div>
+
+                {/* Calculation Cards */}
+                {(() => {
+                  const p = Math.max(0, Number(calcProfit) || 0);
+                  const nonMsmeTax = p * 0.24;
+                  let msmeTax = 0;
+                  if (p <= 150000) {
+                    msmeTax = p * 0.15;
+                  } else if (p <= 600000) {
+                    msmeTax = (150000 * 0.15) + ((p - 150000) * 0.17);
+                  } else {
+                    msmeTax = (150000 * 0.15) + (450000 * 0.17) + ((p - 600000) * 0.24);
+                  }
+                  const savings = Math.max(0, nonMsmeTax - msmeTax);
+
+                  return (
+                    <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {/* SME Tier */}
+                      <div className="bg-emerald-950/40 border border-emerald-800/80 rounded-xl p-3.5 space-y-1">
+                        <span className="text-[10px] font-mono font-bold text-emerald-400 uppercase tracking-wider flex items-center space-x-1">
+                          <Store className="w-3 h-3 text-emerald-400" />
+                          <span>Qualifying SME (MSME)</span>
+                        </span>
+                        <div className="text-lg font-extrabold text-white font-mono">
+                          RM {msmeTax.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                        <p className="text-[10px] text-emerald-300/80">
+                          15% first RM150k, 17% RM150k-600k, 24% balance
+                        </p>
+                      </div>
+
+                      {/* Non-SME Standard */}
+                      <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 space-y-1">
+                        <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider flex items-center space-x-1">
+                          <Building2 className="w-3 h-3 text-indigo-400" />
+                          <span>Standard Corporate</span>
+                        </span>
+                        <div className="text-lg font-extrabold text-slate-200 font-mono">
+                          RM {nonMsmeTax.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                        <p className="text-[10px] text-slate-400">
+                          Flat 24% standard company corporate tax rate
+                        </p>
+                      </div>
+
+                      {/* Tax Savings */}
+                      <div className="bg-cyan-950/40 border border-cyan-800/80 rounded-xl p-3.5 space-y-1">
+                        <span className="text-[10px] font-mono font-bold text-cyan-400 uppercase tracking-wider flex items-center space-x-1">
+                          <TrendingUp className="w-3 h-3 text-cyan-400" />
+                          <span>SME Preferential Savings</span>
+                        </span>
+                        <div className="text-lg font-extrabold text-cyan-300 font-mono">
+                          RM {savings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                        <p className="text-[10px] text-cyan-300/80">
+                          {savings > 0 ? 'Max statutory savings unlocked!' : 'Standard corporate threshold'}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Statutory Footnote Guide */}
+              <div className="pt-3 border-t border-slate-800 text-[11px] text-slate-400 grid grid-cols-1 md:grid-cols-3 gap-3 font-mono">
+                <div className="flex items-start space-x-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0 mt-0.5" />
+                  <span><b>MSME Eligibility:</b> Paid-up capital ≤ RM 2.5M & Foreign ownership ≤ 20% (Schedule 1 Para 2B).</span>
+                </div>
+                <div className="flex items-start space-x-2">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
+                  <span><b>CP204 Penalty Guard:</b> Installment must be ≥ 85% of prior year revised CP204 (Sec 107C(4A)).</span>
+                </div>
+                <div className="flex items-start space-x-2">
+                  <Calculator className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0 mt-0.5" />
+                  <span><b>Schedule 3 CA:</b> 20% IA + 20% AA = 40% first-year claim on ICT & Plant Machinery (GL 1500).</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Reference Guide: ITA 1967 YA 2026 Treatment Matrix */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono flex items-center space-x-2">
+                  <BookOpen className="w-4 h-4 text-cyan-400" />
+                  <span>Malaysian Corporate & SME Statutory Reference Guide (ITA 1967 YA 2026)</span>
+                </h3>
+                <span className="text-xs text-slate-400 font-mono">Deterministic Rules</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
+                <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
+                  <span className="text-xs font-bold text-indigo-400 flex items-center space-x-1.5">
+                    <Building2 className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>P&L Add-Back Rules (Sec 39)</span>
+                  </span>
+                  <ul className="space-y-1.5 text-slate-300 text-[11px]">
+                    <li>• <b>GL 6110 Depreciation:</b> 100% add-back under Sec 39(1). Claim Schedule 3 Capital Allowances instead.</li>
+                    <li>• <b>GL 6140 Client Entertainment:</b> 50% add-back under Sec 39(1)(l) & PR 4/2015. 100% add-back if golf/club membership.</li>
+                    <li>• <b>GL 6145 Annual Staff Dinner:</b> 100% allowable deduction under Sec 39(1)(l)(i) proviso.</li>
+                    <li>• <b>GL 6180 Fines & Summonses:</b> 100% non-deductible add-back under Sec 39(1)(m).</li>
+                  </ul>
+                </div>
+
+                <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
+                  <span className="text-xs font-bold text-emerald-400 flex items-center space-x-1.5">
+                    <Store className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Allowable & Capped Items</span>
+                  </span>
+                  <ul className="space-y-1.5 text-slate-300 text-[11px]">
+                    <li>• <b>GL 6220 Secretarial & Tax Filing:</b> Allowable up to RM 15,000 cap under Sec 34(6)(o). Excess is added back.</li>
+                    <li>• <b>GL 6250 Approved Charity (Sec 44(6)):</b> Add-back to Adjusted Income, then deduct up to Min(Donation, 10% Aggregate Income).</li>
+                    <li>• <b>GL 4200 Fixed Deposit Interest:</b> Separate source under Sec 4(c). Strip from business profit and add at Aggregate stage.</li>
+                    <li>• <b>GL 6300 General Doubtful Debts:</b> 100% non-deductible add-back under Sec 34(2). Specific bad debts allowable.</li>
+                  </ul>
+                </div>
+
+                <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
+                  <span className="text-xs font-bold text-rose-400 flex items-center space-x-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Penalties & Cross-Border Guard</span>
+                  </span>
+                  <ul className="space-y-1.5 text-slate-300 text-[11px]">
+                    <li>• <b>GL 6210 / 6215 Cross-Border WHT:</b> Withholding Tax (Sec 109 / 109B). If unpaid, 100% add-back under Sec 39(1)(f) and triggers Form CP37D alert.</li>
+                    <li>• <b>CP204 Underestimation (Sec 107C(10)):</b> 10% penalty if actual tax exceeds revised estimate by &gt; 30%.</li>
+                    <li>• <b>CP204 Submission Guard (Sec 107C(4A)):</b> Blocked if estimate is &lt; 85% of prior YA revised CP204.</li>
+                    <li>• <b>Sovereign Hosting:</b> Hostinger srv1302021 enclaved in Malaysia for PDPA 2010 compliance.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* TAB 0: OCR & INTELLIGENT INGESTION STUDIO */}
         {activeTab === 'extract' && (
           <div className="space-y-6">
@@ -834,40 +1358,106 @@ export default function App() {
               </div>
 
               
-              {/* Corporate Tax 5-Sheet Workbook Ingestion Banner */}
-              <div className="mb-5 p-4 bg-gradient-to-r from-blue-950/60 to-indigo-950/60 border border-indigo-800/60 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="space-y-1">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-xs font-bold text-indigo-300 font-mono uppercase tracking-wider bg-indigo-950 px-2 py-0.5 rounded border border-indigo-700">
-                      AGT-TAX-MAP • ITA 1967 YA 2026
-                    </span>
-                    <span className="text-xs font-semibold text-white">5-Sheet Corporate Tax Workbook Engine</span>
+              {/* Corporate Tax 5-Sheet Workbook Ingestion Panel */}
+              <div className="mb-6 p-5 bg-gradient-to-r from-blue-950/70 via-indigo-950/70 to-slate-900 border border-indigo-700/70 rounded-2xl shadow-xl space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-indigo-800/60">
+                  <div className="space-y-1">
+                    <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                      <span className="text-xs font-bold text-indigo-300 font-mono uppercase tracking-wider bg-indigo-950 px-2.5 py-0.5 rounded border border-indigo-700 flex items-center space-x-1">
+                        <Building2 className="w-3.5 h-3.5 text-indigo-400" />
+                        <span>AGT-TAX-MAP • ITA 1967 YA 2026</span>
+                      </span>
+                      <span className="text-xs font-semibold text-white">5-Sheet Corporate Tax Workbook Engine</span>
+                    </div>
+                    <p className="text-[11px] text-slate-300">
+                      Automated offset normalizer (header=3), formula stripping, Schedule 1 Para 2B MSME gatekeeper, Schedule 3 Capital Allowance, and Sec 107C CP204 penalty guard.
+                    </p>
                   </div>
-                  <p className="text-[11px] text-slate-300">
-                    Penny-exact statutory classification: Schedule 1 Para 2B MSME gatekeeper, P&L ITA 1967 adjustments & Sec 107C CP204 penalty guard.
-                  </p>
+
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[10px] font-mono text-indigo-300 bg-indigo-900/60 px-2 py-0.5 rounded border border-indigo-700">
+                      Supports Multi-Entity Consolidated Workbooks
+                    </span>
+                  </div>
                 </div>
 
-                <div className="flex items-center space-x-2 flex-wrap gap-2">
-                  <div className="flex items-center space-x-1.5 bg-slate-900 border border-indigo-700/80 rounded-lg px-2 py-1">
-                    <span className="text-[10px] text-slate-400 font-mono">Entity ID:</span>
-                    <input 
-                      type="text"
-                      placeholder="e.g. ENT01"
-                      value={corpTargetEntity}
-                      onChange={(e) => setCorpTargetEntity(e.target.value.trim().toUpperCase())}
-                      className="bg-transparent text-xs text-white font-mono w-24 outline-none"
-                    />
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+                  {/* Workbook Direct File Drop/Picker */}
+                  <div className="md:col-span-7">
+                    <label 
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                          const f = e.dataTransfer.files[0];
+                          if (f.name.toLowerCase().endsWith('.xlsx')) {
+                            setCorpFile(f);
+                            setSuccessMessage(`Loaded corporate workbook: ${f.name}`);
+                          } else {
+                            setErrorMessage('Please upload a valid .xlsx Excel workbook.');
+                          }
+                        }
+                      }}
+                      className="border-2 border-dashed border-indigo-600/60 hover:border-indigo-400 rounded-xl p-3.5 flex items-center justify-between cursor-pointer transition bg-indigo-950/30 hover:bg-indigo-950/60"
+                    >
+                      <div className="flex items-center space-x-3 overflow-hidden">
+                        <div className="p-2 bg-indigo-900/80 rounded-lg text-indigo-300 flex-shrink-0">
+                          <FileSpreadsheet className="w-5 h-5" />
+                        </div>
+                        <div className="overflow-hidden">
+                          {corpFile ? (
+                            <div>
+                              <p className="text-xs font-bold text-white truncate">{corpFile.name}</p>
+                              <p className="text-[10px] text-emerald-400 font-mono">{(corpFile.size / 1024).toFixed(1)} KB • Ready for Compilation</p>
+                            </div>
+                          ) : (
+                            <div>
+                              <p className="text-xs font-medium text-slate-200">Click or Drag & Drop 5-Sheet Corporate Workbook (.xlsx)</p>
+                              <p className="text-[10px] text-slate-400">Sheet 1: Profiles, Sheet 2-3: TB, Sheet 4: CP204, Sheet 5: Outputs</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <input 
+                        type="file" 
+                        accept=".xlsx" 
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            const f = e.target.files[0];
+                            setCorpFile(f);
+                            setSuccessMessage(`Loaded corporate workbook: ${f.name}`);
+                          }
+                        }}
+                        className="hidden" 
+                      />
+                      <span className="text-[11px] font-mono font-semibold bg-indigo-800 hover:bg-indigo-700 text-white px-2.5 py-1 rounded transition flex-shrink-0 ml-2">
+                        {corpFile ? 'Change File' : 'Browse .xlsx'}
+                      </span>
+                    </label>
                   </div>
 
-                  <button
-                    onClick={() => handleRunCorporateWorkbook(corpTargetEntity)}
-                    disabled={corpLoading}
-                    className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-3.5 py-1.5 rounded-lg transition flex items-center space-x-1.5 shadow"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${corpLoading ? 'animate-spin' : ''}`} />
-                    <span>Process Corporate Workbook</span>
-                  </button>
+                  {/* Target Entity ID & Action Button */}
+                  <div className="md:col-span-5 flex items-center space-x-2">
+                    <div className="flex items-center space-x-1.5 bg-slate-950 border border-indigo-700/80 rounded-xl px-3 py-2 flex-1">
+                      <span className="text-[11px] text-slate-400 font-mono flex-shrink-0">Entity ID:</span>
+                      <input 
+                        type="text"
+                        placeholder="e.g. ENT01"
+                        value={corpTargetEntity}
+                        onChange={(e) => setCorpTargetEntity(e.target.value.trim().toUpperCase())}
+                        className="bg-transparent text-xs text-white font-mono w-full outline-none font-bold"
+                      />
+                    </div>
+
+                    <button
+                      onClick={() => handleRunCorporateWorkbook(corpTargetEntity, corpFile)}
+                      disabled={corpLoading}
+                      className="text-xs bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold px-4 py-2 rounded-xl transition flex items-center space-x-1.5 shadow-lg shadow-indigo-600/30 flex-shrink-0 whitespace-nowrap"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${corpLoading ? 'animate-spin' : ''}`} />
+                      <span>{corpLoading ? 'Compiling...' : 'Process Workbook'}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
