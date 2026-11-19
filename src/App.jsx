@@ -195,44 +195,6 @@ export default function App() {
     setActiveTab('mass');
   };
 
-  const handleLoadSampleDocument = async (type) => {
-    // Generate sample CSV or text blob and trigger extraction
-    if (type === 'csv') {
-      const csvData = `Invoice Number,Date,Customer Name,TIN,BRN,Description,Quantity,Unit Price,Tax Type
-INV-2026-EXTRACT-01,2026-11-19,PETRONAS GAS BERHAD,C21098472010,198101003029,Industrial IoT Automation Platform,2,42000,01
-INV-2026-EXTRACT-01,2026-11-19,PETRONAS GAS BERHAD,C21098472010,198101003029,Sovereign Cloud Gateway Appliance,1,16000,01`;
-      const blob = new Blob([csvData], { type: 'text/csv' });
-      const file = new File([blob], 'sample_petronas_invoice.csv', { type: 'text/csv' });
-      await handleFileUploadForOcr(file);
-    } else if (type === 'xlsx') {
-      // Create quick simulated spreadsheet CSV
-      const csvData = `Doc No,Tarikh,Buyer,Buyer TIN,SSM No,Item Description,Qty,Rate,SST Code
-INV-XLS-8899,2026-11-19,SIME DARBY INDUSTRIAL SDN BHD,C10492817010,197201000854,Heavy Machinery Fleet Telemetry AI,3,15000,01
-INV-XLS-8899,2026-11-19,SIME DARBY INDUSTRIAL SDN BHD,C10492817010,197201000854,Preventive Maintenance Diagnostic Kit,1,8500,01`;
-      const blob = new Blob([csvData], { type: 'text/csv' });
-      const file = new File([blob], 'enterprise_billing_export.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      await handleFileUploadForOcr(file);
-    } else if (type === 'ocr') {
-      const ocrText = `TAX INVOICE
-Invoice No: INV-OCR-2026-LIVE
-Date: 2026-11-19
-Customer: CELCOMDIGI ENTERPRISE SDN BHD
-TIN: C10928374010
-BRN: 202001092834
-Address: Menara CelcomDigi, No 6, Persiaran Barat, 46200 Petaling Jaya
-
-Items:
-1. Sovereign Enterprise AI Audit Engine  Qty: 1  Unit Price: RM 35000.00  Tax: 8%
-2. LHDN MyInvois High-Throughput Node   Qty: 1  Unit Price: RM 15000.00  Tax: 8%
-
-Subtotal: RM 50000.00
-Service Tax (8%): RM 4000.00
-Grand Total: RM 54000.00`;
-      const blob = new Blob([ocrText], { type: 'text/plain' });
-      const file = new File([blob], 'scanned_receipt_ocr.txt', { type: 'text/plain' });
-      await handleFileUploadForOcr(file);
-    }
-  };
 
 
   // Corporate Tax Workbook State (MY-CorpTax-AgentOS)
@@ -242,17 +204,17 @@ Grand Total: RM 54000.00`;
 
   const handleRunCorporateWorkbook = async (entityId) => {
     const target = entityId || corpTargetEntity;
+    if (!ocrFile || !ocrFile.name.toLowerCase().endsWith('.xlsx')) {
+      setErrorMessage('Please upload or drag & drop a 5-sheet Corporate Tax Workbook (.xlsx) above first.');
+      return;
+    }
     setCorpLoading(true);
     setErrorMessage('');
     try {
-      let url = `${config.apiBase}/tax/process-corporate-workbook?target_entity=${target}`;
-      let options = { method: 'POST' };
-
-      if (ocrFile && ocrFile.name.endsWith('.xlsx')) {
-        const formData = new FormData();
-        formData.append('file', ocrFile);
-        options.body = formData;
-      }
+      const formData = new FormData();
+      formData.append('file', ocrFile);
+      const url = `${config.apiBase}/tax/process-corporate-workbook?target_entity=${encodeURIComponent(target)}`;
+      const options = { method: 'POST', body: formData };
 
       const res = await fetch(url, options);
       if (!res.ok) {
@@ -264,7 +226,7 @@ Grand Total: RM 54000.00`;
       if (data.arranged_request) {
         setOcrDraft(data.arranged_request);
         setOcrResult({
-          filename: `MY_CorpTax_AgentOS_5Sheet_Mock.xlsx [${data.entity_id}]`,
+          filename: ocrFile ? ocrFile.name : `Corporate_Tax_Workbook_[${data.entity_id}].xlsx`,
           extraction_method: 'AGT-INTAKE_WORKBOOK_NORMALIZER',
           raw_text_preview: JSON.stringify(data.gl_mappings, null, 2),
           confidence_scores: {
@@ -364,36 +326,28 @@ Grand Total: RM 54000.00`;
   // TAB: SINGLE INVOICE INGESTION FORM STATE
   // -------------------------------------------------------------
   const [invoice, setInvoice] = useState({
-    invoice_number: `INV-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+    invoice_number: '',
     issue_date: new Date().toISOString().split('T')[0],
     issue_time: '12:00:00Z',
     currency: 'MYR',
     buyer: {
-      name: 'PETRONAS DIGITAL SDN BHD',
-      tin: 'C25893047020',
+      name: '',
+      tin: '',
       id_type: 'BRN',
-      id_value: '202101002345',
-      sst_registration: 'W10-1808-32000088',
-      email: 'tax.invoicing@petronas.com.my',
-      phone: '+60320515000',
-      address_line: 'Tower 1, PETRONAS Twin Towers, KLCC',
-      city: 'Kuala Lumpur',
+      id_value: '',
+      sst_registration: '',
+      email: '',
+      phone: '',
+      address_line: '',
+      city: '',
       state_code: '14'
     },
     items: [
       {
         classification_code: '022',
-        description: 'Sovereign AI Document Automation Engine Implementation',
+        description: '',
         quantity: 1,
-        unit_price: 45000.0,
-        discount_amount: 0.0,
-        tax_category: '01' // 8% Service Tax
-      },
-      {
-        classification_code: '022',
-        description: 'Enterprise LHDN MyInvois Connector & Compliance Pipeline',
-        quantity: 1,
-        unit_price: 15000.0,
+        unit_price: 0.0,
         discount_amount: 0.0,
         tax_category: '01'
       }
@@ -413,7 +367,7 @@ Grand Total: RM 54000.00`;
   // -------------------------------------------------------------
   // TAB: PROGRESS TRACKER STATE
   // -------------------------------------------------------------
-  const [trackQuery, setTrackQuery] = useState('INV-2026-N8N-SUCCESS-FINAL');
+  const [trackQuery, setTrackQuery] = useState('');
   const [trackResult, setTrackResult] = useState(null);
   const [trackLoading, setTrackLoading] = useState(false);
 
@@ -433,7 +387,7 @@ Grand Total: RM 54000.00`;
   // -------------------------------------------------------------
   // TAB: RAG KNOWLEDGE BASE STATE
   // -------------------------------------------------------------
-  const [ragQuery, setRagQuery] = useState('What is the service tax rate on digital consultancy and IT software in 2026?');
+  const [ragQuery, setRagQuery] = useState('');
   const [ragResult, setRagResult] = useState(null);
   const [ragLoading, setRagLoading] = useState(false);
   const [kbDocs, setKbDocs] = useState([]);
@@ -657,74 +611,6 @@ Grand Total: RM 54000.00`;
     }
   };
 
-  // Generate Sample Mass Batch (3 realistic enterprise invoices)
-  const handleGenerateSampleBatch = () => {
-    const samples = [
-      {
-        invoice_number: `INV-2026-LOG-${Math.floor(1000 + Math.random() * 9000)}`,
-        issue_date: new Date().toISOString().split('T')[0],
-        issue_time: '12:00:00Z',
-        currency: 'MYR',
-        buyer: {
-          name: 'SIME DARBY LOGISTICS BERHAD',
-          tin: 'C10492817010',
-          id_type: 'BRN',
-          id_value: '197201000854',
-          email: 'accounts@simedarby.com',
-          phone: '+60378484000',
-          address_line: 'Oasis Corporate Park',
-          city: 'Petaling Jaya',
-          state_code: '10'
-        },
-        items: [
-          { classification_code: '022', description: 'Cross-Border Haulage Fleet Management AI', quantity: 1, unit_price: 38000, discount_amount: 0, tax_category: '01' }
-        ]
-      },
-      {
-        invoice_number: `INV-2026-TEL-${Math.floor(1000 + Math.random() * 9000)}`,
-        issue_date: new Date().toISOString().split('T')[0],
-        issue_time: '12:00:00Z',
-        currency: 'MYR',
-        buyer: {
-          name: 'MAXIS BROADBAND SDN BHD',
-          tin: 'C19283746500',
-          id_type: 'BRN',
-          id_value: '199201001928',
-          email: 'tax.billing@maxis.com.my',
-          phone: '+60374922123',
-          address_line: 'Menara Maxis, KLCC',
-          city: 'Kuala Lumpur',
-          state_code: '14'
-        },
-        items: [
-          { classification_code: '022', description: 'Telecom Core Network Audit & Security Optimization', quantity: 1, unit_price: 52000, discount_amount: 0, tax_category: '01' }
-        ]
-      },
-      {
-        invoice_number: `INV-2026-ENG-${Math.floor(1000 + Math.random() * 9000)}`,
-        issue_date: new Date().toISOString().split('T')[0],
-        issue_time: '12:00:00Z',
-        currency: 'MYR',
-        buyer: {
-          name: 'GAMUDA ENGINEERING SDN BHD',
-          tin: 'C28394019283',
-          id_type: 'BRN',
-          id_value: '197601002938',
-          email: 'finance.invoices@gamuda.com.my',
-          phone: '+60374918282',
-          address_line: 'Menara Gamuda, PJ Trade Centre',
-          city: 'Petaling Jaya',
-          state_code: '10'
-        },
-        items: [
-          { classification_code: '022', description: 'BIM Infrastructure AI Compute Cluster', quantity: 2, unit_price: 24000, discount_amount: 1000, tax_category: '01' }
-        ]
-      }
-    ];
-    setMassBatch(samples);
-    setSuccessMessage('Generated 3 enterprise sample invoices in batch queue.');
-    setTimeout(() => setSuccessMessage(''), 3000);
-  };
 
   // Execute Mass Orchestration
   const handleExecuteMassOrchestration = async () => {
@@ -944,29 +830,7 @@ Grand Total: RM 54000.00`;
                     Extracts tax data inch-by-inch from <b>CSV, XLSX, PDF, PNG, JPG</b> using sovereign Tesseract OCR & semantic entity mapping.
                   </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <button 
-                    onClick={() => handleLoadSampleDocument('csv')}
-                    className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition flex items-center space-x-1.5"
-                  >
-                    <FileText className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>Try Sample CSV</span>
-                  </button>
-                  <button 
-                    onClick={() => handleLoadSampleDocument('xlsx')}
-                    className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition flex items-center space-x-1.5"
-                  >
-                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Try Sample XLSX</span>
-                  </button>
-                  <button 
-                    onClick={() => handleLoadSampleDocument('ocr')}
-                    className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition flex items-center space-x-1.5"
-                  >
-                    <ScanLine className="w-3.5 h-3.5 text-purple-400" />
-                    <span>Try Scanned OCR Text</span>
-                  </button>
-                </div>
+
               </div>
 
               
@@ -985,20 +849,16 @@ Grand Total: RM 54000.00`;
                 </div>
 
                 <div className="flex items-center space-x-2 flex-wrap gap-2">
-                  <select 
-                    value={corpTargetEntity}
-                    onChange={(e) => {
-                      setCorpTargetEntity(e.target.value);
-                      handleRunCorporateWorkbook(e.target.value);
-                    }}
-                    className="bg-slate-900 border border-indigo-700/80 rounded-lg px-2.5 py-1.5 text-xs text-indigo-200 font-mono"
-                  >
-                    <option value="ENT01">TC-01: ENT01 (MSME 15%/17%/24%)</option>
-                    <option value="ENT02">TC-02: ENT02 (Foreign WHT & CP204 Blocker)</option>
-                    <option value="ENT-TEST-01">TC-TEST: ENT-TEST-01 (Pre-Flight TB Check & Variance Alert)</option>
-                    <option value="ENT03">TC-03: ENT03 (Edge Case: CP204A Revision)</option>
-                    <option value="ENT04">TC-04: ENT04 (Edge Case: High-Capital Non-MSME)</option>
-                  </select>
+                  <div className="flex items-center space-x-1.5 bg-slate-900 border border-indigo-700/80 rounded-lg px-2 py-1">
+                    <span className="text-[10px] text-slate-400 font-mono">Entity ID:</span>
+                    <input 
+                      type="text"
+                      placeholder="e.g. ENT01"
+                      value={corpTargetEntity}
+                      onChange={(e) => setCorpTargetEntity(e.target.value.trim().toUpperCase())}
+                      className="bg-transparent text-xs text-white font-mono w-24 outline-none"
+                    />
+                  </div>
 
                   <button
                     onClick={() => handleRunCorporateWorkbook(corpTargetEntity)}
@@ -1006,18 +866,8 @@ Grand Total: RM 54000.00`;
                     className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-3.5 py-1.5 rounded-lg transition flex items-center space-x-1.5 shadow"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${corpLoading ? 'animate-spin' : ''}`} />
-                    <span>Run Corporate Workbook</span>
+                    <span>Process Corporate Workbook</span>
                   </button>
-
-                  <a
-                    href="/MY_CorpTax_AgentOS_5Sheet_Mock.xlsx"
-                    download="MY_CorpTax_AgentOS_5Sheet_Mock.xlsx"
-                    className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition flex items-center space-x-1"
-                    title="Download 5-Sheet Excel Template"
-                  >
-                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Download XLSX</span>
-                  </a>
                 </div>
               </div>
 
@@ -1993,12 +1843,6 @@ Grand Total: RM 54000.00`;
                   <p className="text-xs text-slate-400 mt-0.5">Upload batches of invoices via CSV, JSON, or generate realistic enterprise test datasets.</p>
                 </div>
                 <div className="flex space-x-2">
-                  <button 
-                    onClick={handleGenerateSampleBatch}
-                    className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition"
-                  >
-                    + Generate 3 Sample Invoices
-                  </button>
                   <label className="text-xs bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg cursor-pointer transition flex items-center space-x-1">
                     <UploadCloud className="w-3.5 h-3.5" />
                     <span>Upload CSV Batch</span>
@@ -2069,7 +1913,7 @@ Grand Total: RM 54000.00`;
               ) : (
                 <div className="p-8 text-center border-2 border-dashed border-slate-800 rounded-xl space-y-2">
                   <UploadCloud className="w-8 h-8 text-slate-600 mx-auto" />
-                  <p className="text-xs text-slate-400">No batch documents staged. Click "Generate 3 Sample Invoices" or upload a CSV file.</p>
+                  <p className="text-xs text-slate-400">No batch documents staged. Upload a CSV batch or drag & drop invoice files in the OCR & Doc Studio.</p>
                 </div>
               )}
             </div>
@@ -2122,7 +1966,7 @@ Grand Total: RM 54000.00`;
                   type="text" 
                   value={trackQuery}
                   onChange={(e) => setTrackQuery(e.target.value)}
-                  placeholder="Enter Invoice Number e.g. INV-2026-N8N-SUCCESS-FINAL"
+                  placeholder="Enter Invoice Number e.g. INV-2026-001"
                   className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono"
                 />
                 <button
@@ -2350,7 +2194,7 @@ Grand Total: RM 54000.00`;
                   type="text" 
                   value={ragQuery}
                   onChange={(e) => setRagQuery(e.target.value)}
-                  placeholder="e.g. What is the SST rate for IT software & digital consulting?"
+                  placeholder="Ask regulatory tax questions (ITA 1967, LHDN guidelines, SST rules)..."
                   className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
                 />
                 <button
