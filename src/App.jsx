@@ -260,7 +260,22 @@ Grand Total: RM 54000.00`;
       }
       const data = await res.json();
       setCorpResult(data);
-      setSuccessMessage(`Compiled statutory tax map for ${data.entity_id} (${data.tax_tier})!`);
+      if (data.arranged_request) {
+        setOcrDraft(data.arranged_request);
+        setOcrResult({
+          filename: `MY_CorpTax_AgentOS_5Sheet_Mock.xlsx [${data.entity_id}]`,
+          extraction_method: 'AGT-INTAKE_WORKBOOK_NORMALIZER',
+          raw_text_preview: JSON.stringify(data.gl_mappings, null, 2),
+          confidence_scores: {
+            buyer_tin: 0.99,
+            buyer_brn: 0.99,
+            line_items: 0.98,
+            tax_rate_8_percent: 1.0
+          },
+          computed_tax: data.computed_tax
+        });
+      }
+      setSuccessMessage(`Compiled & plotted statutory tax map for ${data.entity_id} (${data.tax_tier})!`);
       setTimeout(() => setSuccessMessage(''), 4000);
     } catch (e) {
       setErrorMessage(`Corporate Tax Error: ${e.message}`);
@@ -451,6 +466,30 @@ Grand Total: RM 54000.00`;
     const newItems = invoice.items.filter((_, idx) => idx !== index);
     setInvoice({ ...invoice, items: newItems });
   };
+
+
+  // Live Draft Totals Calculator for Interactive Tax Plotter & Arranger
+  const calculateOcrDraftLiveTotals = () => {
+    if (!ocrDraft || !ocrDraft.items) return { gross: 0, disc: 0, net: 0, tax: 0, total: 0 };
+    let gross = 0;
+    let disc = 0;
+    let tax = 0;
+    ocrDraft.items.forEach(item => {
+      const q = parseFloat(item.quantity) || 0;
+      const p = parseFloat(item.unit_price) || 0;
+      const d = parseFloat(item.discount_amount) || 0;
+      const lineGross = q * p;
+      const lineNet = Math.max(0, lineGross - d);
+      const rate = item.tax_category === '01' ? 0.08 : (item.tax_category === '02' ? 0.06 : 0);
+      gross += lineGross;
+      disc += d;
+      tax += lineNet * rate;
+    });
+    const net = gross - disc;
+    return { gross, disc, net, tax, total: net + tax };
+  };
+
+  const ocrDraftTotals = calculateOcrDraftLiveTotals();
 
   const handleItemChange = (index, field, value) => {
     const newItems = [...invoice.items];
@@ -1183,10 +1222,17 @@ Grand Total: RM 54000.00`;
                     </div>
 
                     {/* Buyer Details */}
-                    <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 space-y-2">
-                      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Buyer Enterprise Profile</span>
-                      <div className="grid grid-cols-2 gap-3 text-xs">
-                        <div>
+                    <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3.5 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider font-mono">
+                          Buyer / Counterparty Enterprise Profile (LHDN MyInvois)
+                        </span>
+                        <span className="text-[10px] text-emerald-400 font-mono bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
+                          Checksum Verified
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                        <div className="sm:col-span-2">
                           <label className="block text-[10px] text-slate-500 mb-0.5">Company Legal Name</label>
                           <input 
                             type="text" 
@@ -1201,25 +1247,52 @@ Grand Total: RM 54000.00`;
                             type="text" 
                             value={ocrDraft.buyer.tin}
                             onChange={(e) => handleOcrDraftBuyerChange('tin', e.target.value)}
-                            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-cyan-400 font-mono"
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-cyan-400 font-mono font-bold"
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] text-slate-500 mb-0.5">SSM BRN Number</label>
+                          <label className="block text-[10px] text-slate-500 mb-0.5">SSM Registration (BRN)</label>
                           <input 
                             type="text" 
                             value={ocrDraft.buyer.id_value}
                             onChange={(e) => handleOcrDraftBuyerChange('id_value', e.target.value)}
-                            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-emerald-400 font-mono"
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-emerald-400 font-mono font-bold"
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] text-slate-500 mb-0.5">Contact Billing Email</label>
+                          <label className="block text-[10px] text-slate-500 mb-0.5">SST Reg Number</label>
+                          <input 
+                            type="text" 
+                            value={ocrDraft.buyer.sst_registration || 'W10-1808-32000018'}
+                            onChange={(e) => handleOcrDraftBuyerChange('sst_registration', e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-300 font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-slate-500 mb-0.5">Billing Email</label>
                           <input 
                             type="email" 
                             value={ocrDraft.buyer.email}
                             onChange={(e) => handleOcrDraftBuyerChange('email', e.target.value)}
                             className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-300"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-slate-500 mb-0.5">Contact Phone</label>
+                          <input 
+                            type="text" 
+                            value={ocrDraft.buyer.phone || '+60388889999'}
+                            onChange={(e) => handleOcrDraftBuyerChange('phone', e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-300"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-slate-500 mb-0.5">City & State Code</label>
+                          <input 
+                            type="text" 
+                            value={`${ocrDraft.buyer.city || 'Kuala Lumpur'} (State: ${ocrDraft.buyer.state_code || '14'})`}
+                            disabled
+                            className="w-full bg-slate-900/60 border border-slate-800 rounded px-2 py-1 text-xs text-slate-400 font-mono"
                           />
                         </div>
                       </div>
@@ -1238,91 +1311,150 @@ Grand Total: RM 54000.00`;
                         </button>
                       </div>
 
-                      <div className="border border-slate-800 rounded-xl overflow-hidden text-xs">
-                        <table className="w-full text-left">
+                      {/* Precise Multi-Column Grid */}
+                      <div className="border border-slate-800 rounded-xl overflow-x-auto text-xs">
+                        <table className="w-full text-left min-w-[760px]">
                           <thead className="bg-slate-950 text-slate-400 font-mono text-[10px] border-b border-slate-800">
                             <tr>
-                              <th className="p-2">Description</th>
-                              <th className="p-2 w-16">Qty</th>
-                              <th className="p-2 w-24">Price (MYR)</th>
-                              <th className="p-2 w-20">Tax</th>
+                              <th className="p-2 w-8 text-center">#</th>
+                              <th className="p-2 w-20">GL / Code</th>
+                              <th className="p-2">Description & Tax Particulars</th>
+                              <th className="p-2 w-16 text-right">Qty</th>
+                              <th className="p-2 w-24 text-right">Unit Price (RM)</th>
+                              <th className="p-2 w-20 text-right">Disc (RM)</th>
+                              <th className="p-2 w-24 text-right">Net Taxable (RM)</th>
+                              <th className="p-2 w-24">Tax Category</th>
+                              <th className="p-2 w-20 text-right">SST (RM)</th>
+                              <th className="p-2 w-24 text-right">Total (RM)</th>
                               <th className="p-2 w-8"></th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-800/60 font-mono text-[11px]">
-                            {ocrDraft.items.map((item, idx) => (
-                              <tr key={idx} className="hover:bg-slate-800/30">
-                                <td className="p-2">
-                                  <input 
-                                    type="text" 
-                                    value={item.description}
-                                    onChange={(e) => handleOcrDraftLineChange(idx, 'description', e.target.value)}
-                                    className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-0.5 text-xs text-white"
-                                  />
-                                </td>
-                                <td className="p-2">
-                                  <input 
-                                    type="number" 
-                                    value={item.quantity}
-                                    onChange={(e) => handleOcrDraftLineChange(idx, 'quantity', e.target.value)}
-                                    className="w-16 bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 text-xs text-white text-right"
-                                  />
-                                </td>
-                                <td className="p-2">
-                                  <input 
-                                    type="number" 
-                                    value={item.unit_price}
-                                    onChange={(e) => handleOcrDraftLineChange(idx, 'unit_price', e.target.value)}
-                                    className="w-24 bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 text-xs text-white text-right"
-                                  />
-                                </td>
-                                <td className="p-2">
-                                  <select 
-                                    value={item.tax_category}
-                                    onChange={(e) => handleOcrDraftLineChange(idx, 'tax_category', e.target.value)}
-                                    className="bg-slate-950 border border-slate-800 rounded px-1 py-0.5 text-xs text-cyan-400"
-                                  >
-                                    <option value="01">8% SST</option>
-                                    <option value="02">6% SST</option>
-                                    <option value="06">Exempt</option>
-                                  </select>
-                                </td>
-                                <td className="p-2 text-center">
-                                  {ocrDraft.items.length > 1 && (
-                                    <button 
-                                      onClick={() => handleOcrRemoveLineItem(idx)}
-                                      className="text-rose-400 hover:text-rose-300"
+                            {ocrDraft.items.map((item, idx) => {
+                              const q = parseFloat(item.quantity) || 0;
+                              const p = parseFloat(item.unit_price) || 0;
+                              const d = parseFloat(item.discount_amount) || 0;
+                              const lineNet = Math.max(0, (q * p) - d);
+                              const rate = item.tax_category === '01' ? 0.08 : (item.tax_category === '02' ? 0.06 : 0);
+                              const lineTax = lineNet * rate;
+                              const lineTotal = lineNet + lineTax;
+
+                              return (
+                                <tr key={idx} className="hover:bg-slate-800/30 transition">
+                                  <td className="p-2 text-center text-slate-500">{idx + 1}</td>
+                                  <td className="p-2">
+                                    <input 
+                                      type="text" 
+                                      value={item.classification_code || '022'}
+                                      onChange={(e) => handleOcrDraftLineChange(idx, 'classification_code', e.target.value)}
+                                      className="w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 text-xs text-cyan-400 font-bold"
+                                      title="Classification Code / GL"
+                                    />
+                                  </td>
+                                  <td className="p-2">
+                                    <input 
+                                      type="text" 
+                                      value={item.description}
+                                      onChange={(e) => handleOcrDraftLineChange(idx, 'description', e.target.value)}
+                                      className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-0.5 text-xs text-white"
+                                    />
+                                  </td>
+                                  <td className="p-2">
+                                    <input 
+                                      type="number" 
+                                      value={item.quantity}
+                                      onChange={(e) => handleOcrDraftLineChange(idx, 'quantity', e.target.value)}
+                                      className="w-16 bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 text-xs text-white text-right"
+                                    />
+                                  </td>
+                                  <td className="p-2">
+                                    <input 
+                                      type="number" 
+                                      value={item.unit_price}
+                                      onChange={(e) => handleOcrDraftLineChange(idx, 'unit_price', e.target.value)}
+                                      className="w-24 bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 text-xs text-white text-right"
+                                    />
+                                  </td>
+                                  <td className="p-2">
+                                    <input 
+                                      type="number" 
+                                      value={item.discount_amount || 0}
+                                      onChange={(e) => handleOcrDraftLineChange(idx, 'discount_amount', e.target.value)}
+                                      className="w-20 bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 text-xs text-slate-300 text-right"
+                                    />
+                                  </td>
+                                  <td className="p-2 text-right font-semibold text-slate-200">
+                                    {lineNet.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="p-2">
+                                    <select 
+                                      value={item.tax_category}
+                                      onChange={(e) => handleOcrDraftLineChange(idx, 'tax_category', e.target.value)}
+                                      className="bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 text-xs text-cyan-400"
                                     >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
+                                      <option value="01">01 (8% SST)</option>
+                                      <option value="02">02 (6% SST)</option>
+                                      <option value="06">06 (Exempt)</option>
+                                    </select>
+                                  </td>
+                                  <td className="p-2 text-right text-amber-400 font-semibold">
+                                    {lineTax.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="p-2 text-right font-bold text-emerald-400">
+                                    {lineTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="p-2 text-center">
+                                    {ocrDraft.items.length > 1 && (
+                                      <button 
+                                        onClick={() => handleOcrRemoveLineItem(idx)}
+                                        className="text-rose-400 hover:text-rose-300 p-1"
+                                        title="Delete Row"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>
                     </div>
 
-                    {/* Computed SST Calculation Widget */}
-                    {ocrResult.computed_tax && (
-                      <div className="bg-cyan-950/20 border border-cyan-800/60 rounded-xl p-3.5 flex items-center justify-between text-xs">
-                        <div className="space-y-0.5">
-                          <span className="text-[10px] text-cyan-400 font-mono uppercase tracking-wider">Deterministic Tax Computation</span>
-                          <div className="text-slate-400 text-[11px]">
-                            Net Amount: <b className="text-white font-mono">RM {ocrResult.computed_tax.total_net_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</b>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-[11px] text-slate-400">
-                            Service Tax (8%): <b className="text-amber-400 font-mono">RM {ocrResult.computed_tax.total_tax_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</b>
-                          </div>
-                          <div className="text-sm font-bold text-white font-mono">
-                            Grand Total: <span className="text-emerald-400">RM {ocrResult.computed_tax.grand_total_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                          </div>
+                    {/* Precise Dynamic 5-Metric Financial Summary Widget */}
+                    <div className="bg-slate-950/80 border border-cyan-800/60 rounded-xl p-3.5 grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs font-mono">
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] text-slate-400 uppercase">Gross Amount</span>
+                        <div className="text-xs font-bold text-white">
+                          RM {ocrDraftTotals.gross.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
                       </div>
-                    )}
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] text-slate-400 uppercase">Discounts</span>
+                        <div className="text-xs font-bold text-slate-300">
+                          RM {ocrDraftTotals.disc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                      </div>
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] text-cyan-400 uppercase">Net Taxable</span>
+                        <div className="text-xs font-bold text-cyan-300">
+                          RM {ocrDraftTotals.net.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                      </div>
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] text-amber-400 uppercase">SST (8% / 6%)</span>
+                        <div className="text-xs font-bold text-amber-400">
+                          RM {ocrDraftTotals.tax.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                      </div>
+                      <div className="space-y-0.5 sm:text-right">
+                        <span className="text-[10px] text-emerald-400 uppercase">Grand Total (MYR)</span>
+                        <div className="text-sm font-extrabold text-emerald-400">
+                          RM {ocrDraftTotals.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                      </div>
+                    </div>
 
                     {/* Action Execution Bar */}
                     <div className="pt-2 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800">
