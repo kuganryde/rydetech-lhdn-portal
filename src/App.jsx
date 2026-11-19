@@ -28,7 +28,8 @@ import {
   FileSpreadsheet,
   Eye,
   Calculator,
-  ArrowRight
+  ArrowRight,
+  Download
 } from 'lucide-react';
 
 const DEFAULT_CONFIG = {
@@ -282,6 +283,81 @@ Grand Total: RM 54000.00`;
     } finally {
       setCorpLoading(false);
     }
+  };
+
+
+  // Multi-File Drag-and-Drop Batch Processing State
+  const [multiFileProgress, setMultiFileProgress] = useState({ active: false, current: 0, total: 0, currentName: '' });
+
+  const handleDownloadPdf = async (invoicePayload) => {
+    const payload = invoicePayload || ocrDraft;
+    if (!payload) return;
+    try {
+      setSuccessMessage('Generating official LHDN e-Invoice PDF with embedded QR Code...');
+      const res = await fetch(`${config.apiBase}/tax/generate-pdf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error('PDF generation failed');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${payload.invoice_number || 'e-invoice'}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      setSuccessMessage('e-Invoice PDF downloaded successfully!');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (e) {
+      setErrorMessage(`PDF download error: ${e.message}`);
+    }
+  };
+
+  const handleMultiFileUpload = async (files) => {
+    if (!files || files.length === 0) return;
+    const fileList = Array.from(files);
+
+    if (fileList.length === 1) {
+      await handleFileUploadForOcr(fileList[0]);
+      return;
+    }
+
+    setMultiFileProgress({ active: true, current: 0, total: fileList.length, currentName: fileList[0].name });
+    setErrorMessage('');
+    const extractedBatch = [];
+
+    for (let i = 0; i < fileList.length; i++) {
+      const f = fileList[i];
+      setMultiFileProgress({ active: true, current: i + 1, total: fileList.length, currentName: f.name });
+      try {
+        const formData = new FormData();
+        formData.append('file', f);
+        const res = await fetch(`${config.apiBase}/tax/extract-and-compute`, {
+          method: 'POST',
+          body: formData
+        });
+        if (res.ok) {
+          const data = await res.json();
+          extractedBatch.push(data.arranged_request);
+          if (i === 0) {
+            setOcrResult(data);
+            setOcrDraft(data.arranged_request);
+          }
+        }
+      } catch (err) {
+        console.error(`Failed to extract ${f.name}:`, err);
+      }
+    }
+
+    if (extractedBatch.length > 0) {
+      setMassBatch(prev => [...prev, ...extractedBatch]);
+      setSuccessMessage(`Extracted & staged ${extractedBatch.length} documents into Mass Batch Queue!`);
+      setTimeout(() => setSuccessMessage(''), 4000);
+    }
+    setMultiFileProgress({ active: false, current: 0, total: 0, currentName: '' });
   };
 
   // -------------------------------------------------------------
@@ -945,20 +1021,51 @@ Grand Total: RM 54000.00`;
                 </div>
               </div>
 
-              {/* Drag & Drop Upload Target */}
-              <label className="border-2 border-dashed border-slate-700 hover:border-cyan-500/80 rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer transition bg-slate-950/40 hover:bg-slate-950/80">
+              {/* Multi-File Drag & Drop Upload Target */}
+              <label 
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                    handleMultiFileUpload(e.dataTransfer.files);
+                  }
+                }}
+                className="border-2 border-dashed border-slate-700 hover:border-cyan-500/80 rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer transition bg-slate-950/40 hover:bg-slate-950/80"
+              >
                 <div className="p-3 bg-cyan-950/60 border border-cyan-800 rounded-xl mb-3 text-cyan-400">
                   <UploadCloud className="w-8 h-8" />
                 </div>
-                <span className="text-sm font-medium text-white">Click or drag & drop invoice document here</span>
-                <span className="text-xs text-slate-400 mt-1">Supports CSV, XLSX/XLS, PDF, and Scanned Images (PNG, JPG, TIFF)</span>
+                <span className="text-sm font-medium text-white">Click or drag & drop multi-file invoices here (Batch Upload Supported)</span>
+                <span className="text-xs text-slate-400 mt-1">Accepts multiple CSV, XLSX, PDF, PNG, or JPG files simultaneously</span>
                 <input 
                   type="file" 
+                  multiple 
                   accept=".csv,.xlsx,.xls,.pdf,.png,.jpg,.jpeg,.tiff" 
-                  onChange={(e) => handleFileUploadForOcr(e.target.files[0])}
+                  onChange={(e) => handleMultiFileUpload(e.target.files)}
                   className="hidden" 
                 />
               </label>
+
+              {/* Multi-File Progress Bar */}
+              {multiFileProgress.active && (
+                <div className="mt-4 p-4 bg-slate-950 border border-cyan-800/80 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-white font-semibold flex items-center space-x-2">
+                      <RefreshCw className="w-3.5 h-3.5 text-cyan-400 animate-spin" />
+                      <span>Batch Processing: {multiFileProgress.currentName}</span>
+                    </span>
+                    <span className="font-mono text-cyan-400">
+                      {multiFileProgress.current} / {multiFileProgress.total} Files
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                    <div 
+                      className="bg-cyan-500 h-full transition-all duration-300"
+                      style={{ width: `${(multiFileProgress.current / multiFileProgress.total) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
 
               {ocrLoading && (
                 <div className="mt-5 p-4 bg-slate-950 border border-cyan-900 rounded-xl flex items-center space-x-4">
@@ -1024,6 +1131,57 @@ Grand Total: RM 54000.00`;
                         <li key={wIdx} className="leading-relaxed">{warn}</li>
                       ))}
                     </ul>
+                  </div>
+                )}
+
+                {/* Schedule 3 Capital Allowance Calculator (GL 1500 Deduction Schedule) */}
+                {corpResult.schedule_3_allowance && (
+                  <div className="bg-slate-950 p-4 rounded-xl border border-cyan-800/80 space-y-3">
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                      <span className="text-xs font-bold text-cyan-300 font-mono flex items-center space-x-1.5">
+                        <Calculator className="w-4 h-4 text-cyan-400" />
+                        <span>Schedule 3 Capital Allowance Schedule (ITA 1967 Para 12 & 15)</span>
+                      </span>
+                      <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800">
+                        40.00% First-Year Claim
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs font-mono">
+                      <div>
+                        <span className="text-[10px] text-slate-400">Qualifying Cost (QE)</span>
+                        <div className="text-xs font-bold text-white mt-0.5">
+                          RM {parseFloat(corpResult.schedule_3_allowance.qualifying_expenditure_rm).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400">Initial Allowance (20%)</span>
+                        <div className="text-xs font-bold text-cyan-300 mt-0.5">
+                          RM {parseFloat(corpResult.schedule_3_allowance.initial_allowance_rm).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400">Annual Allowance (20%)</span>
+                        <div className="text-xs font-bold text-cyan-300 mt-0.5">
+                          RM {parseFloat(corpResult.schedule_3_allowance.annual_allowance_rm).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-emerald-400">Total CA Deduction</span>
+                        <div className="text-xs font-bold text-emerald-400 mt-0.5">
+                          RM {parseFloat(corpResult.schedule_3_allowance.total_capital_allowance_claim_rm).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-amber-400">TWDV Carried Fwd</span>
+                        <div className="text-xs font-bold text-amber-400 mt-0.5">
+                          RM {parseFloat(corpResult.schedule_3_allowance.tax_written_down_value_twdv_rm).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-slate-400 italic">
+                      {corpResult.schedule_3_allowance.treatment_impact}
+                    </p>
                   </div>
                 )}
 
@@ -1458,13 +1616,23 @@ Grand Total: RM 54000.00`;
 
                     {/* Action Execution Bar */}
                     <div className="pt-2 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800">
-                      <button 
-                        onClick={handleOcrAddToMassQueue}
-                        className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3.5 py-2 rounded-xl border border-slate-700 transition flex items-center space-x-1.5"
-                      >
-                        <UploadCloud className="w-4 h-4 text-cyan-400" />
-                        <span>Push to Mass Batch Queue</span>
-                      </button>
+                      <div className="flex items-center space-x-2">
+                        <button 
+                          onClick={handleOcrAddToMassQueue}
+                          className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3.5 py-2 rounded-xl border border-slate-700 transition flex items-center space-x-1.5"
+                        >
+                          <UploadCloud className="w-4 h-4 text-cyan-400" />
+                          <span>Push to Mass Batch Queue</span>
+                        </button>
+                        <button 
+                          onClick={() => handleDownloadPdf(ocrDraft)}
+                          className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3.5 py-2 rounded-xl border border-slate-700 transition flex items-center space-x-1.5"
+                          title="Generate printable e-Invoice PDF with embedded LHDN QR Code"
+                        >
+                          <Download className="w-4 h-4 text-cyan-400" />
+                          <span>Download e-Invoice PDF</span>
+                        </button>
+                      </div>
 
                       <button 
                         onClick={handleOcrSubmitToLhdn}
@@ -1798,6 +1966,14 @@ Grand Total: RM 54000.00`;
                     <span>Receipt Dispatched To:</span>
                     <span className="text-white font-mono">{orchestrationResult.notification_email}</span>
                   </div>
+
+                  <button 
+                    onClick={() => handleDownloadPdf(orchestrationResult.tax_computation)}
+                    className="w-full mt-2 py-2 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-xl border border-slate-700 text-xs flex items-center justify-center space-x-1.5 transition"
+                  >
+                    <Download className="w-4 h-4 text-cyan-400" />
+                    <span>Download Official e-Invoice PDF (with QR Code)</span>
+                  </button>
                 </div>
               )}
             </div>
