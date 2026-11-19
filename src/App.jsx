@@ -233,6 +233,42 @@ Grand Total: RM 54000.00`;
     }
   };
 
+
+  // Corporate Tax Workbook State (MY-CorpTax-AgentOS)
+  const [corpTargetEntity, setCorpTargetEntity] = useState('ENT01');
+  const [corpResult, setCorpResult] = useState(null);
+  const [corpLoading, setCorpLoading] = useState(false);
+
+  const handleRunCorporateWorkbook = async (entityId) => {
+    const target = entityId || corpTargetEntity;
+    setCorpLoading(true);
+    setErrorMessage('');
+    try {
+      let url = `${config.apiBase}/tax/process-corporate-workbook?target_entity=${target}`;
+      let options = { method: 'POST' };
+
+      if (ocrFile && ocrFile.name.endsWith('.xlsx')) {
+        const formData = new FormData();
+        formData.append('file', ocrFile);
+        options.body = formData;
+      }
+
+      const res = await fetch(url, options);
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Corporate tax compilation failed');
+      }
+      const data = await res.json();
+      setCorpResult(data);
+      setSuccessMessage(`Compiled statutory tax map for ${data.entity_id} (${data.tax_tier})!`);
+      setTimeout(() => setSuccessMessage(''), 4000);
+    } catch (e) {
+      setErrorMessage(`Corporate Tax Error: ${e.message}`);
+    } finally {
+      setCorpLoading(false);
+    }
+  };
+
   // -------------------------------------------------------------
   // TAB: SINGLE INVOICE INGESTION FORM STATE
   // -------------------------------------------------------------
@@ -818,6 +854,57 @@ Grand Total: RM 54000.00`;
                 </div>
               </div>
 
+              
+              {/* Corporate Tax 5-Sheet Workbook Ingestion Banner */}
+              <div className="mb-5 p-4 bg-gradient-to-r from-blue-950/60 to-indigo-950/60 border border-indigo-800/60 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs font-bold text-indigo-300 font-mono uppercase tracking-wider bg-indigo-950 px-2 py-0.5 rounded border border-indigo-700">
+                      AGT-TAX-MAP • ITA 1967 YA 2026
+                    </span>
+                    <span className="text-xs font-semibold text-white">5-Sheet Corporate Tax Workbook Engine</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300">
+                    Penny-exact statutory classification: Schedule 1 Para 2B MSME gatekeeper, P&L ITA 1967 adjustments & Sec 107C CP204 penalty guard.
+                  </p>
+                </div>
+
+                <div className="flex items-center space-x-2 flex-wrap gap-2">
+                  <select 
+                    value={corpTargetEntity}
+                    onChange={(e) => {
+                      setCorpTargetEntity(e.target.value);
+                      handleRunCorporateWorkbook(e.target.value);
+                    }}
+                    className="bg-slate-900 border border-indigo-700/80 rounded-lg px-2.5 py-1.5 text-xs text-indigo-200 font-mono"
+                  >
+                    <option value="ENT01">TC-01: ENT01 (MSME 15%/17%/24%)</option>
+                    <option value="ENT02">TC-02: ENT02 (Foreign WHT & CP204 Blocker)</option>
+                    <option value="ENT03">TC-03: ENT03 (Edge Case: CP204A Revision)</option>
+                    <option value="ENT04">TC-04: ENT04 (Edge Case: High-Capital Non-MSME)</option>
+                  </select>
+
+                  <button
+                    onClick={() => handleRunCorporateWorkbook(corpTargetEntity)}
+                    disabled={corpLoading}
+                    className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-3.5 py-1.5 rounded-lg transition flex items-center space-x-1.5 shadow"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${corpLoading ? 'animate-spin' : ''}`} />
+                    <span>Run Corporate Workbook</span>
+                  </button>
+
+                  <a
+                    href="/MY_CorpTax_AgentOS_5Sheet_Mock.xlsx"
+                    download="MY_CorpTax_AgentOS_5Sheet_Mock.xlsx"
+                    className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition flex items-center space-x-1"
+                    title="Download 5-Sheet Excel Template"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Download XLSX</span>
+                  </a>
+                </div>
+              </div>
+
               {/* Drag & Drop Upload Target */}
               <label className="border-2 border-dashed border-slate-700 hover:border-cyan-500/80 rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer transition bg-slate-950/40 hover:bg-slate-950/80">
                 <div className="p-3 bg-cyan-950/60 border border-cyan-800 rounded-xl mb-3 text-cyan-400">
@@ -843,6 +930,118 @@ Grand Total: RM 54000.00`;
                 </div>
               )}
             </div>
+
+            
+            {/* CORPORATE TAX AGENT STATUTORY MAPPING RESULTS */}
+            {corpResult && (
+              <div className="bg-slate-900 border border-indigo-800/80 rounded-2xl p-6 shadow-2xl space-y-5 animate-fade-in">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-800 gap-3">
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-base font-bold text-white font-mono">{corpResult.entity_id}</span>
+                      <span className={`text-xs font-mono font-bold px-2.5 py-0.5 rounded-full border ${
+                        corpResult.tax_tier === 'QUALIFYING_MSME'
+                          ? 'bg-emerald-950 text-emerald-300 border-emerald-700'
+                          : 'bg-blue-950 text-blue-300 border-blue-700'
+                      }`}>
+                        {corpResult.tax_tier}
+                      </span>
+                    </div>
+                    {corpResult.msme_disqualification_reason ? (
+                      <p className="text-xs text-rose-300 mt-1">{corpResult.msme_disqualification_reason}</p>
+                    ) : (
+                      <p className="text-xs text-emerald-400 mt-1">Schedule 1 Para 2B Compliant: 15% first RM150k, 17% RM150k-600k, 24% balance</p>
+                    )}
+                  </div>
+
+                  {/* CP204 Status Banner */}
+                  <div className="flex items-center space-x-2">
+                    <div className={`p-3 rounded-xl border flex items-center space-x-2 text-xs font-mono ${
+                      corpResult.cp204_status.decision === 'PASS'
+                        ? 'bg-emerald-950/60 border-emerald-800 text-emerald-300'
+                        : (corpResult.cp204_status.decision === 'BLOCK_SUBMISSION'
+                            ? 'bg-rose-950/80 border-rose-800 text-rose-200'
+                            : 'bg-amber-950/80 border-amber-800 text-amber-200')
+                    }`}>
+                      <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                      <div>
+                        <div className="font-bold">CP204: {corpResult.cp204_status.decision}</div>
+                        <div className="text-[10px] opacity-80">{corpResult.cp204_status.rule_triggered}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Statutory GL Classification Table */}
+                <div className="space-y-2">
+                  <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider font-mono">
+                    Statutory P&L Adjustments (Income Tax Act 1967 YA 2026)
+                  </span>
+                  <div className="border border-slate-800 rounded-xl overflow-hidden text-xs">
+                    <table className="w-full text-left">
+                      <thead className="bg-slate-950 text-slate-400 font-mono text-[10px] border-b border-slate-800">
+                        <tr>
+                          <th className="p-2.5">GL Code</th>
+                          <th className="p-2.5 text-right">Penny-Exact Amount</th>
+                          <th className="p-2.5">Treatment Code</th>
+                          <th className="p-2.5">ITA 1967 Reference</th>
+                          <th className="p-2.5">Statutory Action / Alert</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60 font-mono text-[11px]">
+                        {corpResult.gl_mappings.map((m, mIdx) => (
+                          <tr key={mIdx} className="hover:bg-slate-800/30">
+                            <td className="p-2.5 font-bold text-cyan-400">{m.gl_code}</td>
+                            <td className="p-2.5 text-right font-bold text-white">RM {parseFloat(m.amount_rm).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                            <td className="p-2.5">
+                              <span className={`px-2 py-0.5 rounded text-[10px] border ${
+                                m.treatment_code.includes('DISALLOWED') || m.treatment_code.includes('NON_DEDUCTIBLE')
+                                  ? 'bg-rose-950/60 border-rose-800 text-rose-300'
+                                  : (m.treatment_code.includes('ALLOWABLE')
+                                      ? 'bg-emerald-950/60 border-emerald-800 text-emerald-300'
+                                      : 'bg-slate-800 border-slate-700 text-slate-300')
+                              }`}>
+                                {m.treatment_code}
+                              </span>
+                            </td>
+                            <td className="p-2.5 text-indigo-300">{m.ita_section}</td>
+                            <td className="p-2.5 text-[11px] text-slate-300">
+                              {m.action_alert ? (
+                                <span className={m.action_alert.includes('ALERT') ? 'text-rose-400 font-bold' : 'text-slate-400'}>
+                                  {m.action_alert}
+                                </span>
+                              ) : (
+                                <span className="text-slate-600">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Raw JSON Schema Output Box */}
+                <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
+                    <span>Compliant Agent Output (AGT-TAX-MAP Schema)</span>
+                    <button 
+                      onClick={() => {
+                        navigator.clipboard.writeText(JSON.stringify(corpResult, null, 2));
+                        setSuccessMessage('Copied AGT-TAX-MAP JSON to clipboard!');
+                        setTimeout(() => setSuccessMessage(''), 2000);
+                      }}
+                      className="text-cyan-400 hover:underline"
+                    >
+                      Copy JSON
+                    </button>
+                  </div>
+                  <pre className="text-[10px] font-mono text-slate-300 max-h-48 overflow-y-auto leading-relaxed">
+                    {JSON.stringify(corpResult, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            )}
 
             {/* Inch-by-Inch Inspector & Interactive Tax Plotter */}
             {ocrResult && ocrDraft && (
